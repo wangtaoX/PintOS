@@ -17,6 +17,7 @@
 #include "threads/palloc.h"
 #include "threads/thread.h"
 #include "threads/vaddr.h"
+#include "devices/timer.h"
 
 static thread_func start_process NO_RETURN;
 static bool load (const char *cmdline, void (**eip) (void), void **esp);
@@ -40,6 +41,11 @@ process_execute (const char *file_name)
 
   /* Create a new thread to execute FILE_NAME. */
   tid = thread_create (file_name, PRI_DEFAULT, start_process, fn_copy);
+
+  /* #### */
+  timer_sleep(10);
+  /* #### */
+
   if (tid == TID_ERROR)
     palloc_free_page (fn_copy); 
   return tid;
@@ -62,9 +68,11 @@ start_process (void *file_name_)
   success = load (file_name, &if_.eip, &if_.esp);
 
   /* If load failed, quit. */
-  palloc_free_page (file_name);
   if (!success) 
+  {
+    palloc_free_page (file_name);
     thread_exit ();
+  }
 
   /* Start the user process by simulating a return from an
      interrupt, implemented by intr_exit (in
@@ -220,7 +228,9 @@ load (const char *file_name, void (**eip) (void), void **esp)
   if (t->pagedir == NULL) 
     goto done;
   process_activate ();
+  
 
+  printf("Debug : open file[%s]\n", file_name);
   /* Open executable file. */
   file = filesys_open (file_name);
   if (file == NULL) 
@@ -228,6 +238,7 @@ load (const char *file_name, void (**eip) (void), void **esp)
       printf ("load: %s: open failed\n", file_name);
       goto done; 
     }
+  printf("Debug : Open executable file success\n");
 
   /* Read and verify executable header. */
   if (file_read (file, &ehdr, sizeof ehdr) != sizeof ehdr
@@ -276,6 +287,10 @@ load (const char *file_name, void (**eip) (void), void **esp)
               uint32_t mem_page = phdr.p_vaddr & ~PGMASK;
               uint32_t page_offset = phdr.p_vaddr & PGMASK;
               uint32_t read_bytes, zero_bytes;
+
+              if (mem_page == 0)
+                mem_page += 0x1000;
+
               if (phdr.p_filesz > 0)
                 {
                   /* Normal segment.
@@ -301,9 +316,12 @@ load (const char *file_name, void (**eip) (void), void **esp)
         }
     }
 
+  printf("Debug : Read program headers success\n");
   /* Set up stack. */
   if (!setup_stack (esp))
     goto done;
+
+  printf("Debug : Set up stack success\n");
 
   /* Start address. */
   *eip = (void (*) (void)) ehdr.e_entry;
@@ -358,7 +376,9 @@ validate_segment (const struct Elf32_Phdr *phdr, struct file *file)
      it then user code that passed a null pointer to system calls
      could quite likely panic the kernel by way of null pointer
      assertions in memcpy(), etc. */
-  if (phdr->p_vaddr < PGSIZE)
+  //if (phdr->p_vaddr < PGSIZE)
+  //  return false;
+  if (phdr->p_offset < PGSIZE)
     return false;
 
   /* It's okay. */
