@@ -5,6 +5,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <list.h>
 #include "userprog/gdt.h"
 #include "userprog/pagedir.h"
 #include "userprog/tss.h"
@@ -31,6 +32,13 @@ process_execute (const char *file_name)
 {
   char *fn_copy;
   tid_t tid;
+  /* #### Parse the option */
+  char *save_ptr;
+  /* Name of this user procsee */
+  char *file_name_;
+  struct thread *child_process;
+  /* #### */
+  
 
   /* Make a copy of FILE_NAME.
      Otherwise there's a race between the caller and load(). */
@@ -38,13 +46,31 @@ process_execute (const char *file_name)
   if (fn_copy == NULL)
     return TID_ERROR;
   strlcpy (fn_copy, file_name, PGSIZE);
-
+  
+  /* #### */
+  file_name_ = strtok_r(file_name, " ", &save_ptr);
+  printf("file name : %s\n", file_name);
+  /* #### */
+  
   /* Create a new thread to execute FILE_NAME. */
-  tid = thread_create (file_name, PRI_DEFAULT, start_process, fn_copy);
+  tid = thread_create (file_name_, PRI_DEFAULT, start_process, fn_copy);
 
-  /* #### */
-  timer_sleep(10);
-  /* #### */
+#ifdef USERPROG
+  /* Parent process cannot return from the EXEC until it knows whether 
+   * the child process successfully loaded its executable*/
+  if (tid != TID_ERROR)
+  {
+    child_process = thread_find_by_tid(tid);
+    if (child_process != NULL)
+    {
+      sema_down(&child_process->wait_sema);
+      if (child_process->exit_status == -1)
+        tid = TID_ERROR;
+    }
+    else
+      tid = TID_ERROR;
+  }
+#endif
 
   if (tid == TID_ERROR)
     palloc_free_page (fn_copy); 
@@ -59,20 +85,85 @@ start_process (void *file_name_)
   char *file_name = file_name_;
   struct intr_frame if_;
   bool success;
+  /* #### */
+  char *save_ptr;
+  char *argv[5];
+  char *token;
+  int argc = 0;
+  unsigned char *base = PHYS_BASE;
+  int i, total_byte = 0, len;
+
+  for (token = strtok_r(file_name, " ", &save_ptr); token != NULL;
+      token = strtok_r(NULL, " ", &save_ptr))
+    argv[argc++] = token;
+  /* #### */
 
   /* Initialize interrupt frame and load executable. */
   memset (&if_, 0, sizeof if_);
   if_.gs = if_.fs = if_.es = if_.ds = if_.ss = SEL_UDSEG;
   if_.cs = SEL_UCSEG;
   if_.eflags = FLAG_IF | FLAG_MBS;
-  success = load (file_name, &if_.eip, &if_.esp);
+  success = load (argv[0], &if_.eip, &if_.esp);
 
   /* If load failed, quit. */
   if (!success) 
   {
     palloc_free_page (file_name);
+    thread_current()->exit_status = -1;
     thread_exit ();
   }
+  /* Weap up the parent process, it is waiting on EXEC */
+  sema_up(&(thread_current()->wait_sema));
+
+  /* #### Here, arguments passing, now *esp equal to PHYS_BASE */
+  printf("argc : %d Origin base:%x\n", argc, base);
+
+  /* Push argv[] on stack */
+  for (i = argc - 1; i>=0; i--)
+  {
+    len = strnlen(argv[i], 10);
+    base = base - len - 1;
+    printf("argv[%d] : %s len : %d\n", i, argv[i], len);
+    memcpy((void *)base, (void *)argv[i], len+1);
+    argv[i] = base;
+    total_byte = total_byte + len + 1;
+  }
+  printf("STring total_byte : %d Base : %x\n", total_byte, base);
+
+  /* Align in 4 bytes */
+  total_byte = 4 - total_byte % 4;
+  base = base - total_byte;
+  memset(base, 0, total_byte);
+  
+  printf("Align STring Base : %x\n", base);
+  
+  /* Set argv[argv] to NULL */
+  base = memset(base - 4, 0, 4);
+  printf("Argv[%d] base : %x\n",argc, base);
+
+  /* Push argv[i] on stack (pointer) */
+  for (i = argc - 1; i>=0; i--)
+  {
+    base = base - 4;
+    *(char *)base = argv[i];
+    printf("Argv[%d] base : %x\n", i, base);
+  }
+  /* Push argv on stack */
+  base = base - 4;
+  *(char **)base = base + 4;
+  /* Push argc on stack */
+  base = base - 4;
+  *(int *)base = argc;
+  printf("Argc Base : %x\n", base);
+  /* Push a fake return address on stack */
+  base = memset(base-4, 0, 4);
+
+  if_.esp = base;
+  printf("base : %x\n", base);
+  hex_dump(base, (void *)base, 128, true);
+  
+  /* #### */
+
 
   /* Start the user process by simulating a return from an
      interrupt, implemented by intr_exit (in
@@ -94,9 +185,27 @@ start_process (void *file_name_)
    This function will be implemented in problem 2-2.  For now, it
    does nothing. */
 int
-process_wait (tid_t child_tid UNUSED) 
+process_wait (tid_t child_tid) 
 {
-  return -1;
+  struct thread *c;
+  int status = -1;
+
+  c = thread_find_by_tid(child_tid);
+
+  if (c != NULL)
+  {
+    if (c->is_waited != true)
+    {
+      sema_init(&c->wait_sema, 0);
+      c->is_waited = true;
+      sema_down(&c->wait_sema);
+      status = c->exit_status;
+    }
+    else
+      status = -1;
+  }
+
+  return status;
 }
 
 /* Free the current process's resources. */
@@ -105,6 +214,21 @@ process_exit (void)
 {
   struct thread *cur = thread_current ();
   uint32_t *pd;
+  struct list_elem *e;
+  struct thread *child;
+
+  /* Parent process exit before its child process, change every child
+   * process`s parent to NULL */
+  for (e = list_begin(&cur->child_list); e != list_end(&cur->child_list);
+      e = list_next(e))
+  {
+    child = list_entry(e, struct thread, child_elem);
+    child->parent_process = NULL;
+  }
+
+  /* When load failure, remove it from parent`s child_list */
+  if (cur->parent_process != NULL)
+    list_remove(&(cur->child_elem));
 
   /* Destroy the current process's page directory and switch back
      to the kernel-only page directory. */

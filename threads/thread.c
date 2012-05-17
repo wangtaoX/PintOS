@@ -167,6 +167,7 @@ thread_create (const char *name, int priority,
                thread_func *function, void *aux) 
 {
   struct thread *t;
+  struct thread *cur = thread_current();
   struct kernel_thread_frame *kf;
   struct switch_entry_frame *ef;
   struct switch_threads_frame *sf;
@@ -204,11 +205,16 @@ thread_create (const char *name, int priority,
   sf->eip = switch_entry;
   sf->ebp = 0;
 
+#ifdef USERPROG
+  /* List all child in child_list */
+  //if (thread_current() != idle_thread)
+    list_push_back(&cur->child_list, &t->child_elem);
+    t->parent_process = cur;
+#endif
   intr_set_level (old_level);
 
   /* Add to run queue. */
   thread_unblock (t);
-  thread_yield();
 
   return tid;
 }
@@ -291,6 +297,9 @@ thread_exit (void)
 {
   ASSERT (!intr_context ());
 
+  /* ### Sema up the parent which is waiting on this child process */
+  if (!list_empty(&(thread_current()->wait_sema.waiters)))
+    sema_up(&(thread_current()->wait_sema));
 #ifdef USERPROG
   process_exit ();
 #endif
@@ -471,6 +480,17 @@ init_thread (struct thread *t, const char *name, int priority)
   t->priority = priority;
   t->magic = THREAD_MAGIC;
   list_push_back (&all_list, &t->allelem);
+#ifdef USERPROG
+  t->is_waited = false;
+  list_init(&t->child_list);
+  sema_init(&t->wait_sema, 0);
+#endif
+  
+  /* List all child in child_list */
+  //if (thread_current() != idle_thread)
+  //{
+  //  list_push_back(&thread_current()->child_list, &t->child_elem);
+  //}
 }
 
 /* Allocates a SIZE-byte frame at the top of thread T's stack and
@@ -586,3 +606,23 @@ allocate_tid (void)
 /* Offset of `stack' member within `struct thread'.
    Used by switch.S, which can't figure it out on its own. */
 uint32_t thread_stack_ofs = offsetof (struct thread, stack);
+
+
+/* ###*/
+/* Find child thread by tid */
+struct thread *thread_find_by_tid(tid_t tid)
+{
+  struct thread *t = thread_current();
+  struct list_elem *e;
+  struct thread *tmp = NULL;
+
+  e = list_head(&t->child_list);
+  while ((e = list_next(e)) != list_end(&t->child_list))
+  {
+     tmp = list_entry(e, struct thread, child_elem);
+     if (tmp->tid == tid)
+       return tmp;
+  }
+
+  return NULL;
+}

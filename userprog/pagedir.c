@@ -261,3 +261,16 @@ invalidate_pagedir (uint32_t *pd)
       pagedir_activate (pd);
     } 
 }
+
+/* Check out whether the virtual addresses UADDR is mapped or not,
+ * return TRUE  if successful, false otherwise */
+bool is_mapped_addr(uint32_t *pd, uint32_t *uaddr)
+{
+  uint32_t *pde;
+
+  ASSERT(is_user_vaddr(uaddr));
+
+  pde = lookup_page(pd, uaddr, false);
+  
+  return pde ? true : false;
+}

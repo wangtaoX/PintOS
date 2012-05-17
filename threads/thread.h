@@ -1,6 +1,7 @@
 #ifndef THREADS_THREAD_H
 #define THREADS_THREAD_H
 
+#include "threads/synch.h"
 #include <debug.h>
 #include <list.h>
 #include <stdint.h>
@@ -96,6 +97,14 @@ struct thread
 #ifdef USERPROG
     /* Owned by userprog/process.c. */
     uint32_t *pagedir;                  /* Page directory. */
+    /* #### */
+    struct list_elem child_elem;        /* List element for all child threads */
+    struct list child_list;             /* List for child */
+    bool is_waited;                     /* Whether the thread is waited by it`s parent */
+    int exit_status;                    /* Exit status for parent process */
+    struct semaphore wait_sema;         /* Use to sync for wait */
+    struct thread *parent_process;      /* Parent process */
+    /* ####*/
 #endif
 
     /* Owned by thread.c. */
@@ -137,5 +146,8 @@ int thread_get_nice (void);
 void thread_set_nice (int);
 int thread_get_recent_cpu (void);
 int thread_get_load_avg (void);
+
+/* Find child thread by pid */
+struct thread *thread_find_by_tid(tid_t tid);
 
 #endif /* threads/thread.h */
