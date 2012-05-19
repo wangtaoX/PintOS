@@ -2,6 +2,8 @@
 #define THREADS_THREAD_H
 
 #include "threads/synch.h"
+#include "filesys/filesys.h"
+#include "filesys/file.h"
 #include <debug.h>
 #include <list.h>
 #include <stdint.h>
@@ -24,6 +26,8 @@ typedef int tid_t;
 #define PRI_MIN 0                       /* Lowest priority. */
 #define PRI_DEFAULT 31                  /* Default priority. */
 #define PRI_MAX 63                      /* Highest priority. */
+
+#define DEFAULT_OPEN_FILES 32
 
 /* A kernel thread or user process.
 
@@ -104,6 +108,7 @@ struct thread
     int exit_status;                    /* Exit status for parent process */
     struct semaphore wait_sema;         /* Use to sync for wait */
     struct thread *parent_process;      /* Parent process */
+    struct file **fd;
     /* ####*/
 #endif
 

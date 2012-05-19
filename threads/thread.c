@@ -173,6 +173,7 @@ thread_create (const char *name, int priority,
   struct switch_threads_frame *sf;
   tid_t tid;
   enum intr_level old_level;
+  int i;
 
   ASSERT (function != NULL);
 
@@ -208,8 +209,13 @@ thread_create (const char *name, int priority,
 #ifdef USERPROG
   /* List all child in child_list */
   //if (thread_current() != idle_thread)
-    list_push_back(&cur->child_list, &t->child_elem);
-    t->parent_process = cur;
+  list_push_back(&cur->child_list, &t->child_elem);
+  t->parent_process = cur;
+
+  /* Opened FILE DESCRIPTOR array */
+  t->fd = malloc(DEFAULT_OPEN_FILES * 4);
+  for (i = 0; i<DEFAULT_OPEN_FILES; i++)
+    t->fd[i] = NULL;
 #endif
   intr_set_level (old_level);
 

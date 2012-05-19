@@ -268,7 +268,8 @@ bool is_mapped_addr(uint32_t *pd, uint32_t *uaddr)
 {
   uint32_t *pde;
 
-  ASSERT(is_user_vaddr(uaddr));
+  if (!is_user_vaddr(uaddr))
+    return false;
 
   pde = lookup_page(pd, uaddr, false);
   

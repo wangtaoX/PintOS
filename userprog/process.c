@@ -18,6 +18,7 @@
 #include "threads/palloc.h"
 #include "threads/thread.h"
 #include "threads/vaddr.h"
+#include "threads/malloc.h"
 #include "devices/timer.h"
 
 static thread_func start_process NO_RETURN;
@@ -34,6 +35,7 @@ process_execute (const char *file_name)
   tid_t tid;
   /* #### Parse the option */
   char *save_ptr;
+  char *file_name_on_stack;
   /* Name of this user procsee */
   char *file_name_;
   struct thread *child_process;
@@ -42,19 +44,20 @@ process_execute (const char *file_name)
 
   /* Make a copy of FILE_NAME.
      Otherwise there's a race between the caller and load(). */
+  file_name_on_stack = malloc(strlen(file_name));
+  memcpy(file_name_on_stack, file_name, strlen(file_name) + 1);
   fn_copy = palloc_get_page (0);
   if (fn_copy == NULL)
     return TID_ERROR;
   strlcpy (fn_copy, file_name, PGSIZE);
   
   /* #### */
-  file_name_ = strtok_r(file_name, " ", &save_ptr);
-  printf("file name : %s\n", file_name);
+  file_name_ = strtok_r(file_name_on_stack, " ", &save_ptr);
   /* #### */
   
   /* Create a new thread to execute FILE_NAME. */
   tid = thread_create (file_name_, PRI_DEFAULT, start_process, fn_copy);
-
+  free(file_name_on_stack);
 #ifdef USERPROG
   /* Parent process cannot return from the EXEC until it knows whether 
    * the child process successfully loaded its executable*/
@@ -64,6 +67,7 @@ process_execute (const char *file_name)
     if (child_process != NULL)
     {
       sema_down(&child_process->wait_sema);
+      sema_init(&child_process->wait_sema, 0);
       if (child_process->exit_status == -1)
         tid = TID_ERROR;
     }
@@ -87,16 +91,20 @@ start_process (void *file_name_)
   bool success;
   /* #### */
   char *save_ptr;
-  char *argv[5];
+  char *argv[DEFAULT_ARGS];
   char *token;
   int argc = 0;
-  unsigned char *base = PHYS_BASE;
+  uint8_t *base = PHYS_BASE;
   int i, total_byte = 0, len;
 
   for (token = strtok_r(file_name, " ", &save_ptr); token != NULL;
       token = strtok_r(NULL, " ", &save_ptr))
     argv[argc++] = token;
+
+  //for (i = 0; i<argc; i++)
+  //  printf("ARGV[%d] %s\n", i,argv[i]);
   /* #### */
+
 
   /* Initialize interrupt frame and load executable. */
   memset (&if_, 0, sizeof if_);
@@ -105,48 +113,53 @@ start_process (void *file_name_)
   if_.eflags = FLAG_IF | FLAG_MBS;
   success = load (argv[0], &if_.eip, &if_.esp);
 
+  //if (!success)
+  //  printf("load fail\n");
   /* If load failed, quit. */
   if (!success) 
   {
-    palloc_free_page (file_name);
     thread_current()->exit_status = -1;
+    sema_up(&(thread_current()->wait_sema));
     thread_exit ();
   }
   /* Weap up the parent process, it is waiting on EXEC */
   sema_up(&(thread_current()->wait_sema));
+  thread_yield();
 
   /* #### Here, arguments passing, now *esp equal to PHYS_BASE */
-  printf("argc : %d Origin base:%x\n", argc, base);
+  //printf("argc : %d Origin base:%x\n", argc, base);
 
   /* Push argv[] on stack */
   for (i = argc - 1; i>=0; i--)
   {
-    len = strnlen(argv[i], 10);
+    len = strnlen(argv[i], 14);
     base = base - len - 1;
-    printf("argv[%d] : %s len : %d\n", i, argv[i], len);
+    //printf("argv[%d] : %s len : %d\n", i, argv[i], len);
     memcpy((void *)base, (void *)argv[i], len+1);
+    //printf(" base argv[%d] %s\n", i, (char *)base);
     argv[i] = base;
     total_byte = total_byte + len + 1;
   }
-  printf("STring total_byte : %d Base : %x\n", total_byte, base);
+  //printf("STring total_byte : %d Base : %x\n", total_byte, base);
 
   /* Align in 4 bytes */
   total_byte = 4 - total_byte % 4;
   base = base - total_byte;
   memset(base, 0, total_byte);
   
-  printf("Align STring Base : %x\n", base);
+  //printf("Align STring Base : %x\n", base);
   
   /* Set argv[argv] to NULL */
   base = memset(base - 4, 0, 4);
-  printf("Argv[%d] base : %x\n",argc, base);
+  //printf("Argv[%d] base : %x\n",argc, base);
 
   /* Push argv[i] on stack (pointer) */
   for (i = argc - 1; i>=0; i--)
   {
     base = base - 4;
-    *(char *)base = argv[i];
-    printf("Argv[%d] base : %x\n", i, base);
+    *(uint32_t *)base = argv[i];
+    //printf("*base : %x\n", *(uint32_t *)base);
+    //printf("Argv[%d] base  : %x &Argv[%d] : %x\n", i, base, i, argv[i]);
   }
   /* Push argv on stack */
   base = base - 4;
@@ -154,16 +167,15 @@ start_process (void *file_name_)
   /* Push argc on stack */
   base = base - 4;
   *(int *)base = argc;
-  printf("Argc Base : %x\n", base);
+  //printf("Argc Base : %x\n", base);
   /* Push a fake return address on stack */
   base = memset(base-4, 0, 4);
 
   if_.esp = base;
-  printf("base : %x\n", base);
-  hex_dump(base, (void *)base, 128, true);
+  //printf("base : %x\n", base);
+  //hex_dump(base, (void *)base, 128, true);
   
   /* #### */
-
 
   /* Start the user process by simulating a return from an
      interrupt, implemented by intr_exit (in
@@ -196,7 +208,6 @@ process_wait (tid_t child_tid)
   {
     if (c->is_waited != true)
     {
-      sema_init(&c->wait_sema, 0);
       c->is_waited = true;
       sema_down(&c->wait_sema);
       status = c->exit_status;
@@ -216,6 +227,7 @@ process_exit (void)
   uint32_t *pd;
   struct list_elem *e;
   struct thread *child;
+  int i = 2;
 
   /* Parent process exit before its child process, change every child
    * process`s parent to NULL */
@@ -229,6 +241,13 @@ process_exit (void)
   /* When load failure, remove it from parent`s child_list */
   if (cur->parent_process != NULL)
     list_remove(&(cur->child_elem));
+
+//  while(i < DEFAULT_OPEN_FILES)
+//  {
+//    if ((cur->fd)[++i] != NULL)
+//      file_close((cur->fd)[i]);
+//  }
+  free(cur->fd);
 
   /* Destroy the current process's page directory and switch back
      to the kernel-only page directory. */
@@ -354,7 +373,6 @@ load (const char *file_name, void (**eip) (void), void **esp)
   process_activate ();
   
 
-  printf("Debug : open file[%s]\n", file_name);
   /* Open executable file. */
   file = filesys_open (file_name);
   if (file == NULL) 
@@ -362,7 +380,6 @@ load (const char *file_name, void (**eip) (void), void **esp)
       printf ("load: %s: open failed\n", file_name);
       goto done; 
     }
-  printf("Debug : Open executable file success\n");
 
   /* Read and verify executable header. */
   if (file_read (file, &ehdr, sizeof ehdr) != sizeof ehdr
@@ -440,12 +457,9 @@ load (const char *file_name, void (**eip) (void), void **esp)
         }
     }
 
-  printf("Debug : Read program headers success\n");
   /* Set up stack. */
   if (!setup_stack (esp))
     goto done;
-
-  printf("Debug : Set up stack success\n");
 
   /* Start address. */
   *eip = (void (*) (void)) ehdr.e_entry;
