@@ -11,6 +11,7 @@
 #include "userprog/process.h"
 #include "filesys/filesys.h"
 #include "filesys/file.h"
+#include "filesys/inode.h"
 
 typedef int pid_t;
 
@@ -75,7 +76,6 @@ static void
 syscall_handler (struct intr_frame *f) 
 {
   uint32_t *esp = (uint32_t *)(f->esp);
-  
   if (!_valid_uaddr((void *)esp) || !_valid_uaddr((void *)(esp + 4)))
   {
     printf("%s: exit(%d)\n", thread_current()->name, -1);
@@ -166,6 +166,7 @@ static void _do_sys_exit(int status)
 }
 static int _do_sys_wait(pid_t pid)
 {
+  //printf("?wait?\n");
   return process_wait(pid);
 }
 
@@ -195,12 +196,10 @@ static int _do_sys_open(const char *file)
   struct file *f;
 
   f = filesys_open(file);
+  while(cur->fd[++fd] != NULL);
 
-  if (f != NULL)
-  {
-    while(cur->fd[++fd] != NULL);
+  if (f != NULL && fd < DEFAULT_OPEN_FILES)
     cur->fd[fd] = f;
-  }
   else
     fd = -1;
   
@@ -250,7 +249,6 @@ static int _do_sys_read(int fd, void *buffer, unsigned size)
       (fd > 2 && (cur->fd)[fd] == NULL) || fd == 1)
     return -1;
 
-
   if (size == 0)
     return 0;
 
@@ -265,8 +263,6 @@ static int _do_sys_read(int fd, void *buffer, unsigned size)
     f = (struct file *)(cur->fd)[fd];
     read_size = file_read(f, buffer, size);
   }
-
-  //printf("buffer : %s\n", (char *)buffer);
 
   return read_size;
 }
@@ -291,6 +287,7 @@ static int _do_sys_write(int fd, void *buffer, unsigned size)
   }
   else
   {
+//    printf("0x%x file deny write : %d", (cur->fd)[fd], (cur->fd)[fd]->deny_write);
     write_size = file_write((cur->fd)[fd], buffer, size);
   }
 

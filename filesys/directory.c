@@ -39,6 +39,7 @@ dir_open (struct inode *inode)
     {
       dir->inode = inode;
       dir->pos = 0;
+
       return dir;
     }
   else

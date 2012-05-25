@@ -1,4 +1,4 @@
-#include "userprog/process.h"
+# include "userprog/process.h"
 #include <debug.h>
 #include <inttypes.h>
 #include <round.h>
@@ -61,6 +61,7 @@ process_execute (const char *file_name)
 #ifdef USERPROG
   /* Parent process cannot return from the EXEC until it knows whether 
    * the child process successfully loaded its executable*/
+  //printf("tid %d create tid %d\n", thread_current()->tid, tid);
   if (tid != TID_ERROR)
   {
     child_process = thread_find_by_tid(tid);
@@ -69,6 +70,7 @@ process_execute (const char *file_name)
       sema_down(&child_process->wait_sema);
       sema_init(&child_process->wait_sema, 0);
       if (child_process->exit_status == -1)
+        //printf("child failed\n");
         tid = TID_ERROR;
     }
     else
@@ -120,11 +122,15 @@ start_process (void *file_name_)
   {
     thread_current()->exit_status = -1;
     sema_up(&(thread_current()->wait_sema));
+    thread_yield();
     thread_exit ();
   }
+  else
+  {
   /* Weap up the parent process, it is waiting on EXEC */
-  sema_up(&(thread_current()->wait_sema));
-  thread_yield();
+    sema_up(&(thread_current()->wait_sema));
+    thread_yield();
+  }
 
   /* #### Here, arguments passing, now *esp equal to PHYS_BASE */
   //printf("argc : %d Origin base:%x\n", argc, base);
@@ -163,10 +169,10 @@ start_process (void *file_name_)
   }
   /* Push argv on stack */
   base = base - 4;
-  *(char **)base = base + 4;
+  *(uint8_t **)base = base + 4;
   /* Push argc on stack */
   base = base - 4;
-  *(int *)base = argc;
+  *(int32_t *)base = argc;
   //printf("Argc Base : %x\n", base);
   /* Push a fake return address on stack */
   base = memset(base-4, 0, 4);
@@ -204,17 +210,24 @@ process_wait (tid_t child_tid)
 
   c = thread_find_by_tid(child_tid);
 
+  //if (c == NULL)
+  //  printf("Find No child\n");
+
   if (c != NULL)
   {
+    //printf("c->is_waited %d\n", c->is_waited);
     if (c->is_waited != true)
     {
       c->is_waited = true;
+      //printf("%s in process wait\n",thread_current()->name);
       sema_down(&c->wait_sema);
       status = c->exit_status;
+      //printf("UP%s in process wait : status %d\n",thread_current()->name, status);
     }
     else
       status = -1;
   }
+  //printf("%s in process wait : status %d\n",thread_current()->name, status);
 
   return status;
 }
@@ -242,13 +255,20 @@ process_exit (void)
   if (cur->parent_process != NULL)
     list_remove(&(cur->child_elem));
 
-//  while(i < DEFAULT_OPEN_FILES)
+//  while(cur->name != "main" && i < DEFAULT_OPEN_FILES)
 //  {
 //    if ((cur->fd)[++i] != NULL)
 //      file_close((cur->fd)[i]);
 //  }
+  file_close((cur->fd)[DEFAULT_OPEN_FILES - 1]);
   free(cur->fd);
 
+  /* ### Sema up the parent which is waiting on this child process */
+  if (!list_empty(&(thread_current()->wait_sema.waiters)))
+  {
+    sema_up(&(thread_current()->wait_sema));
+    thread_yield();
+  }
   /* Destroy the current process's page directory and switch back
      to the kernel-only page directory. */
   pd = cur->pagedir;
@@ -371,10 +391,16 @@ load (const char *file_name, void (**eip) (void), void **esp)
   if (t->pagedir == NULL) 
     goto done;
   process_activate ();
-  
 
   /* Open executable file. */
   file = filesys_open (file_name);
+
+  /*### An executable file cannot be modified */
+  if (file != NULL && !file->deny_write)
+    file_deny_write(file);
+  /*### */
+  //printf("0x%x file->deny_write : %d\n", file, file->deny_write);
+  
   if (file == NULL) 
     {
       printf ("load: %s: open failed\n", file_name);
@@ -468,7 +494,8 @@ load (const char *file_name, void (**eip) (void), void **esp)
 
  done:
   /* We arrive here whether the load is successful or not. */
-  file_close (file);
+  //file_close (file);
+  t->fd[DEFAULT_OPEN_FILES - 1] = file;
   return success;
 }
 

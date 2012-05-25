@@ -19,15 +19,6 @@ struct inode_disk
     unsigned magic;                     /* Magic number. */
     uint32_t unused[125];               /* Not used. */
   };
-
-/* Returns the number of sectors to allocate for an inode SIZE
-   bytes long. */
-static inline size_t
-bytes_to_sectors (off_t size)
-{
-  return DIV_ROUND_UP (size, BLOCK_SECTOR_SIZE);
-}
-
 /* In-memory inode. */
 struct inode 
   {
@@ -38,6 +29,15 @@ struct inode
     int deny_write_cnt;                 /* 0: writes ok, >0: deny writes. */
     struct inode_disk data;             /* Inode content. */
   };
+
+/* Returns the number of sectors to allocate for an inode SIZE
+   bytes long. */
+static inline size_t
+bytes_to_sectors (off_t size)
+{
+  return DIV_ROUND_UP (size, BLOCK_SECTOR_SIZE);
+}
+
 
 /* Returns the block device sector that contains byte offset POS
    within INODE.
@@ -335,6 +335,7 @@ inode_allow_write (struct inode *inode)
   ASSERT (inode->deny_write_cnt > 0);
   ASSERT (inode->deny_write_cnt <= inode->open_cnt);
   inode->deny_write_cnt--;
+  //printf("inode_deny_write %d\n", inode->deny_write_cnt);
 }
 
 /* Returns the length, in bytes, of INODE's data. */

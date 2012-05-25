@@ -9,6 +9,7 @@ test_main (void)
 {
   const char *child_cmd = "child-rox " CHILD_CNT;
   int handle;
+  int b;
   pid_t child;
   char buffer[16];
 
@@ -28,6 +29,6 @@ test_main (void)
 
   /* Write to child-rox again. */
   seek (handle, 0);
-  CHECK (write (handle, buffer, sizeof buffer) == (int) sizeof buffer,
+  CHECK (write(handle, buffer, sizeof buffer) == (int) sizeof buffer,
          "write \"child-rox\"");
 }

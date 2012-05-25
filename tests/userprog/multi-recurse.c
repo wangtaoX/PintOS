@@ -13,8 +13,10 @@ int
 main (int argc UNUSED, char *argv[]) 
 {
   int n = atoi (argv[1]);
+//  int n = 10;
 
   msg ("begin %d", n);
+//  printf("Pass\n");
   if (n != 0) 
     {
       char child_cmd[128];

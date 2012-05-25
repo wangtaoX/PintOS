@@ -132,7 +132,6 @@ main (void)
   /* Run actions specified on kernel command line. */
   run_actions (argv);
 
-
   printf("If successful\n");
   /* Finish up. */
   shutdown ();

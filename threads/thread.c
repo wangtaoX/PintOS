@@ -303,9 +303,6 @@ thread_exit (void)
 {
   ASSERT (!intr_context ());
 
-  /* ### Sema up the parent which is waiting on this child process */
-  if (!list_empty(&(thread_current()->wait_sema.waiters)))
-    sema_up(&(thread_current()->wait_sema));
 #ifdef USERPROG
   process_exit ();
 #endif
