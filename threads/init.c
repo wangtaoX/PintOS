@@ -101,7 +101,7 @@ main (void)
   palloc_init (user_page_limit);
   malloc_init ();
   paging_init ();
-  frame_table_init();
+  //frame_table_init();
 
   /* Segmentation. */
 #ifdef USERPROG
