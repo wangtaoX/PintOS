@@ -44,8 +44,12 @@ process_execute (const char *file_name)
 
   /* Make a copy of FILE_NAME.
      Otherwise there's a race between the caller and load(). */
-  file_name_on_stack = malloc(strlen(file_name));
-  memcpy(file_name_on_stack, file_name, strlen(file_name) + 1);
+
+  //file_name_on_stack = malloc(strlen(file_name));
+  file_name_on_stack = palloc_get_page(0);
+  //memcpy(file_name_on_stack, file_name, strlen(file_name) + 1);
+  memcpy(file_name_on_stack, file_name, PGSIZE);
+
   fn_copy = palloc_get_page (0);
   if (fn_copy == NULL)
     return TID_ERROR;
@@ -57,7 +61,8 @@ process_execute (const char *file_name)
   
   /* Create a new thread to execute FILE_NAME. */
   tid = thread_create (file_name_, PRI_DEFAULT, start_process, fn_copy);
-  free(file_name_on_stack);
+  /* free it */
+  palloc_free_page(file_name_on_stack);
 #ifdef USERPROG
   /* Parent process cannot return from the EXEC until it knows whether 
    * the child process successfully loaded its executable*/
@@ -181,6 +186,7 @@ start_process (void *file_name_)
   //printf("base : %x\n", base);
   //hex_dump(base, (void *)base, 128, true);
   
+  palloc_free_page(file_name);
   /* #### */
 
   /* Start the user process by simulating a return from an

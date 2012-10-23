@@ -7,7 +7,7 @@
 struct frame
 {
   /* Referrence counts */
-  int count;
+  int pining;
   /* Virtual address of this frame */
   void *virtual;
   /* Which thread obtained this frame */

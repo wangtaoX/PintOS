@@ -1,5 +1,4 @@
 #include "frame.h"
-
 #include "threads/synch.h"
 #include "threads/malloc.h"
 #include "threads/thread.h"
@@ -8,6 +7,8 @@
 static struct lock frame_table_lock;
 /* Frame hash table */
 static struct list frame_list_table;
+
+static inline void update_frame_table(void *vir, void *p);
 
 void frame_table_init()
 {
@@ -20,7 +21,6 @@ static inline void update_frame_table(void *vir, void *p)
   struct thread *cur = thread_current();
   struct frame *f = (struct frame *)malloc(sizeof(struct frame));
 
-  f->count = 1;
   f->virtual = vir;
   f->owner = cur;
   list_push_back(&frame_list_table, &f->frame_list_elem);
