@@ -7,9 +7,11 @@
 struct frame
 {
   /* Referrence counts */
-  int pining;
+  bool pining;
   /* Virtual address of this frame */
-  void *virtual;
+  void *uvir;
+  /* Kernel virtual address */
+  void *kvir;
   /* Which thread obtained this frame */
   struct thread *owner;
   /* Hash element */
@@ -20,4 +22,5 @@ struct frame
 void frame_table_init();
 void *frame_get_page(enum palloc_flags flag, void *vir);
 void frame_free_page(void *p);
+void debug_frame_table(void);
 #endif
