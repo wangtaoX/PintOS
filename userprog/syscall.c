@@ -78,9 +78,7 @@ syscall_handler (struct intr_frame *f)
   uint32_t *esp = (uint32_t *)(f->esp);
   if (!_valid_uaddr((void *)esp) || !_valid_uaddr((void *)(esp + 4)))
   {
-    printf("%s: exit(%d)\n", thread_current()->name, -1);
-    thread_current()->exit_status = -1;
-    thread_exit();
+    goto done;
   }
 
   //printf("SYS_NUMBER : %d\n", *(int *)esp);

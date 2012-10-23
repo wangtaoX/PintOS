@@ -302,7 +302,7 @@ void
 thread_exit (void) 
 {
   ASSERT (!intr_context ());
-
+  
 #ifdef USERPROG
   process_exit ();
 #endif
@@ -628,4 +628,10 @@ struct thread *thread_find_by_tid(tid_t tid)
   }
 
   return NULL;
+}
+bool is_not_main(struct thread *t)
+{
+  ASSERT(t != NULL);
+
+  return t != &initial_thread;
 }

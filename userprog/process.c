@@ -53,7 +53,7 @@ process_execute (const char *file_name)
   fn_copy = palloc_get_page (0);
   if (fn_copy == NULL)
     return TID_ERROR;
-  strlcpy (fn_copy, file_name, PGSIZE);
+  memcpy(fn_copy, file_name, PGSIZE);
   
   /* #### */
   file_name_ = strtok_r(file_name_on_stack, " ", &save_ptr);
@@ -120,8 +120,6 @@ start_process (void *file_name_)
   if_.eflags = FLAG_IF | FLAG_MBS;
   success = load (argv[0], &if_.eip, &if_.esp);
 
-  //if (!success)
-  //  printf("load fail\n");
   /* If load failed, quit. */
   if (!success) 
   {
@@ -186,7 +184,7 @@ start_process (void *file_name_)
   //printf("base : %x\n", base);
   //hex_dump(base, (void *)base, 128, true);
   
-  palloc_free_page(file_name);
+  palloc_free_page(file_name_);
   /* #### */
 
   /* Start the user process by simulating a return from an
@@ -246,7 +244,7 @@ process_exit (void)
   uint32_t *pd;
   struct list_elem *e;
   struct thread *child;
-  int i = 2;
+  int i = 3;
 
   /* Parent process exit before its child process, change every child
    * process`s parent to NULL */
@@ -261,12 +259,12 @@ process_exit (void)
   if (cur->parent_process != NULL)
     list_remove(&(cur->child_elem));
 
-//  while(cur->name != "main" && i < DEFAULT_OPEN_FILES)
-//  {
-//    if ((cur->fd)[++i] != NULL)
-//      file_close((cur->fd)[i]);
-//  }
-  file_close((cur->fd)[DEFAULT_OPEN_FILES - 1]);
+  while(is_not_main(cur) && i < DEFAULT_OPEN_FILES)
+  {
+    if ((cur->fd)[i] != NULL)
+      file_close((cur->fd)[i]);
+    i++;
+  }
   free(cur->fd);
 
   /* ### Sema up the parent which is waiting on this child process */

@@ -154,5 +154,6 @@ int thread_get_load_avg (void);
 
 /* Find child thread by pid */
 struct thread *thread_find_by_tid(tid_t tid);
+bool is_not_main(struct thread *t);
 
 #endif /* threads/thread.h */
