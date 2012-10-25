@@ -7,6 +7,9 @@
 #include <debug.h>
 #include <list.h>
 #include <stdint.h>
+#ifdef VM
+#include "vm/page.h"
+#endif
 
 /* States in a thread's life cycle. */
 enum thread_status
@@ -110,6 +113,14 @@ struct thread
     struct thread *parent_process;      /* Parent process */
     struct file **fd;
     /* ####*/
+#endif
+
+#ifdef VM
+    struct lock spt_table_lock;
+    struct hash spt_table;
+    
+    void *esp;
+    bool in_syscall;
 #endif
 
     /* Owned by thread.c. */

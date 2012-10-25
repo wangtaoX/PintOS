@@ -22,11 +22,14 @@
 #include "devices/timer.h"
 #ifdef VM
 #include "vm/frame.h"
+#include "vm/page.h"
 #endif
 
 static thread_func start_process NO_RETURN;
 static bool load (const char *cmdline, void (**eip) (void), void **esp);
 
+static bool load_segment_lazily(struct file *file, off_t offset,
+    void *uva, uint32_t read_bytes, uint32_t zero_bytes, bool writeable);
 /* Starts a new thread running a user program loaded from
    FILENAME.  The new thread may be scheduled (and may even exit)
    before process_execute() returns.  Returns the new process's
@@ -270,12 +273,14 @@ process_exit (void)
   }
   free(cur->fd);
 
+  destory_spt_table(cur);
   /* ### Sema up the parent which is waiting on this child process */
   if (!list_empty(&(thread_current()->wait_sema.waiters)))
   {
     sema_up(&(thread_current()->wait_sema));
     thread_yield();
   }
+
   /* Destroy the current process's page directory and switch back
      to the kernel-only page directory. */
   pd = cur->pagedir;
@@ -480,7 +485,7 @@ load (const char *file_name, void (**eip) (void), void **esp)
                   read_bytes = 0;
                   zero_bytes = ROUND_UP (page_offset + phdr.p_memsz, PGSIZE);
                 }
-              if (!load_segment (file, file_page, (void *) mem_page,
+              if (!load_segment_lazily (file, file_page, (void *) mem_page,
                                  read_bytes, zero_bytes, writable))
                 goto done;
             }
@@ -620,6 +625,48 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
   return true;
 }
 
+/*####*/
+/* lazy loading of segment */
+static bool load_segment_lazily(struct file *file, off_t offset,
+    void *uva, uint32_t read_bytes, uint32_t zero_bytes, bool writeable)
+{
+  ASSERT((read_bytes + zero_bytes) % PGSIZE == 0);
+  ASSERT(pg_ofs(uva) == 0);
+  ASSERT(offset % PGSIZE == 0);
+
+//  printf("load lazily start [segment]\n");
+  while(read_bytes > 0 || zero_bytes > 0)
+  {
+    /* page_read_bytes plus page_zero_bytes must be equal to PGSIZE */
+    size_t page_read_bytes = read_bytes >= PGSIZE ? PGSIZE : read_bytes;
+    size_t page_zero_bytes = PGSIZE - page_read_bytes;
+    struct spt_general *sg;
+    enum spt_type type;
+    struct thread *t = thread_current();
+    
+    type = (page_zero_bytes == PGSIZE) ? ZERO : FILE;
+
+    /* return a new spt entry  */
+    sg = new_spt_entry(file, uva, offset, page_read_bytes, page_zero_bytes, writeable, type); 
+    if (sg == NULL)
+      return false;
+
+//    printf("read_bytes : %d zero_bytes : %d\n", page_read_bytes, page_zero_bytes);
+    add_spt_entry(t, sg);
+
+    /* update the value */
+    read_bytes -= page_read_bytes;
+    zero_bytes -= page_zero_bytes;
+    uva += PGSIZE;
+    offset += PGSIZE;
+  }
+  file_seek (file, offset);
+
+//  printf("load lazily end\n");
+
+  return true;
+}
+/*#### */
 /* Create a minimal stack by mapping a zeroed page at the top of
    user virtual memory. */
 static bool

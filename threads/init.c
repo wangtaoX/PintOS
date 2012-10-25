@@ -138,7 +138,7 @@ main (void)
   /* Run actions specified on kernel command line. */
   run_actions (argv);
 
-  printf("If successful\n");
+  timer_sleep(200);
   /* Finish up. */
   shutdown ();
   thread_exit ();

@@ -6,13 +6,19 @@
 #include "threads/thread.h"
 #include "userprog/pagedir.h"
 #include "threads/vaddr.h"
+#include "userprog/process.h"
+#ifdef VM
+#include "vm/page.h"
+#endif
 
 
 /* Number of page faults processed. */
 static long long page_fault_cnt;
 
 static void kill (struct intr_frame *);
+static bool lazy_loading(struct thread *t, void *fault_addr);
 static void page_fault (struct intr_frame *);
+static bool is_stack_access(struct thread *t, void *fault_addr);
 
 /* Registers handlers for interrupts that can be caused by user
    programs.
@@ -152,19 +158,26 @@ page_fault (struct intr_frame *f)
   write = (f->error_code & PF_W) != 0;
   user = (f->error_code & PF_U) != 0;
 
+ // printf("pf....fault_addr 0x%x\n", fault_addr);
+  if (!cur->in_syscall)
+  {
+//    printf("not in syscall\n");
+    cur->esp = f->esp;
+  }
+
   /*#### When user process attemps to read at a bad address,
    * terminate it with exit code -1 */
-  if (user)
+  if (!is_user_vaddr(fault_addr) || fault_addr == NULL)
   {
-    if (!is_user_vaddr(fault_addr) || fault_addr == NULL)
-    {
-      cur->exit_status = -1;
-      printf("%s: exit(%d)\n", cur->name, -1);
-      thread_exit();
-    }
-
-    return ;
+    goto bad_pf;
   }
+  if (not_present)
+  {
+    if (!lazy_loading(cur, fault_addr))
+      goto bad_pf;
+  }
+
+  return ;
   /* To implement virtual memory, delete the rest of the function
      body, and replace it with code that brings in the page to
      which fault_addr refers. */
@@ -174,5 +187,38 @@ page_fault (struct intr_frame *f)
           write ? "writing" : "reading",
           user ? "user" : "kernel");
   kill (f);
+
+  bad_pf:
+   cur->exit_status = -1;
+   printf("%s: exit(%d)\n", cur->name, -1);
+   thread_exit();
 }
 
+/* #### lazy loading */
+static bool 
+lazy_loading(struct thread *t, void *fault_addr)
+{
+  ASSERT(fault_addr != NULL);
+  ASSERT(t != NULL);
+
+  uint32_t *vaddr = pg_round_down(fault_addr);
+  struct spt_general *sg= find_lazy_page_spt_entry(t, vaddr);
+
+  if (sg == NULL && is_stack_access(t, fault_addr))
+  {
+//    printf("check stack grow success\n");
+    sg = new_spt_entry(NULL, vaddr, 0, 0, 0, true, ZERO);
+  }
+
+  return load_lazy_page_spt_entry(sg);
+}
+/* ####*/
+
+/* is it stack access ? */
+static bool is_stack_access(struct thread *t, void *fault_addr)
+{
+
+  return (fault_addr < PHYS_BASE)
+    && (fault_addr > (t->esp - 32))
+    && (fault_addr > STACK_ADDR_LIMIT);
+}

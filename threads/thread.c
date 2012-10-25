@@ -217,6 +217,10 @@ thread_create (const char *name, int priority,
   for (i = 0; i<DEFAULT_OPEN_FILES; i++)
     t->fd[i] = NULL;
 #endif
+#ifdef VM
+  init_spt_table(t);
+  t->in_syscall = false;
+#endif
   intr_set_level (old_level);
 
   /* Add to run queue. */
