@@ -193,6 +193,7 @@ start_process (void *file_name_)
   palloc_free_page(file_name_);
   /* #### */
 
+  print_spt_table(thread_current());
   /* Start the user process by simulating a return from an
      interrupt, implemented by intr_exit (in
      threads/intr-stubs.S).  Because intr_exit takes all of its
@@ -674,9 +675,13 @@ setup_stack (void **esp)
 {
   uint8_t *kpage;
   bool success = false;
+  struct spt_zero *sz;
+  struct thread *t = thread_current();
 
   //kpage = palloc_get_page (PAL_USER | PAL_ZERO);
   kpage = frame_get_page (PAL_USER | PAL_ZERO, (uint8_t *)PHYS_BASE - PGSIZE);
+  sz = new_spt_entry(NULL, (void *)PHYS_BASE - PGSIZE, 0, 0, 0, true, ZERO);
+  add_spt_entry(t, sz);
   if (kpage != NULL) 
     {
       success = install_page (((uint8_t *) PHYS_BASE) - PGSIZE, kpage, true);

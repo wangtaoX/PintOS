@@ -19,8 +19,9 @@ struct frame
 };
 
 /* Frame table function */
-void frame_table_init();
+void frame_table_init(void);
 void *frame_get_page(enum palloc_flags flag, void *vir);
 void frame_free_page(void *p);
+void *evict_frame(void *vir);
 void debug_frame_table(void);
 #endif

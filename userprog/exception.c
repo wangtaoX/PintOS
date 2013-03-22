@@ -158,7 +158,8 @@ page_fault (struct intr_frame *f)
   write = (f->error_code & PF_W) != 0;
   user = (f->error_code & PF_U) != 0;
 
- // printf("pf....fault_addr 0x%x\n", fault_addr);
+  if (cur->tid == 3)
+    printf("pf....fault_addr 0x%x\n", fault_addr);
   if (!cur->in_syscall)
   {
 //    printf("not in syscall\n");
@@ -174,7 +175,10 @@ page_fault (struct intr_frame *f)
   if (not_present)
   {
     if (!lazy_loading(cur, fault_addr))
+    {
+      printf("lazy load error in page fault....0x%x\n", fault_addr);
       goto bad_pf;
+    }
   }
 
   return ;
@@ -204,9 +208,11 @@ lazy_loading(struct thread *t, void *fault_addr)
   uint32_t *vaddr = pg_round_down(fault_addr);
   struct spt_general *sg= find_lazy_page_spt_entry(t, vaddr);
 
-  if (sg == NULL && is_stack_access(t, fault_addr))
+  if (sg == NULL 
+      && is_stack_access(t, fault_addr) 
+      && sg->type != SWAP)
   {
-//    printf("check stack grow success\n");
+    printf("check stack grow success\n");
     sg = new_spt_entry(NULL, vaddr, 0, 0, 0, true, ZERO);
   }
 
